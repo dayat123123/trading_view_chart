@@ -9,26 +9,45 @@ class TradingViewChartHtml extends StatefulWidget {
 }
 
 class _TradingViewChartHtmlState extends State<TradingViewChartHtml> {
-  @override
-  void initState() {
-    super.initState();
-  }
+  InAppWebViewController? webViewController;
 
   @override
   Widget build(BuildContext context) {
-    return InAppWebView(
-      keepAlive: InAppWebViewKeepAlive(),
-      initialData: InAppWebViewInitialData(
-        data: tradingViewHtml,
-        mimeType: 'text/html',
-        encoding: 'utf-8',
+    return Scaffold(
+      appBar: AppBar(title: Text('TradingView Chart')),
+      body: InAppWebView(
+        onConsoleMessage: (controller, consoleMessage) {
+          print("Console Message: ${consoleMessage.message}");
+        },
+        initialData: InAppWebViewInitialData(
+          data: tradingViewHtml,
+          mimeType: 'text/html',
+          encoding: 'utf-8',
+        ),
+        onWebViewCreated: (controller) async {
+          webViewController = controller;
+          // Menambahkan JavaScript Handler
+          controller.addJavaScriptHandler(
+            handlerName: 'printMessage',
+            callback: (args) {
+              print("Message from JavaScript: ${args[0]}");
+            },
+          );
+        },
+        onLoadStop: (controller, url) async {
+          // Memanggil handler dari JavaScript setelah halaman selesai dimuat
+          await controller.evaluateJavascript(
+            source:
+                "window.flutter_inappwebview.callHandler('printMessage', 'Hello from WebView!');",
+          );
+        },
       ),
     );
   }
 }
 
 const String tradingViewHtml = '''
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -66,6 +85,16 @@ const String tradingViewHtml = '''
   <div id="tradingview_widget"></div>
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script type="text/javascript">
+    function sendMessageToFlutter(symbol) {
+      // Pastikan handler JavaScript dipanggil dengan benar
+      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        console.log('Sending message to Flutter: Symbol changed: ' + symbol);
+        window.flutter_inappwebview.callHandler('printMessage', 'Symbol changed: ' + symbol);
+      } else {
+        console.error('Flutter InAppWebView handler is not defined');
+      }
+    }
+
     new TradingView.widget({
       "width": "100%",
       "height": "100%",
@@ -87,9 +116,16 @@ const String tradingViewHtml = '''
       "withdateranges": false,
       "hide_volume": true,
       "news": ["headlines"],
-      "container_id": "tradingview_widget"
+      "container_id": "tradingview_widget",
+
+      // Callback ketika simbol berubah
+      "onSymbolChange": function(symbol) {
+        console.log('Symbol changed in TradingView widget: ' + symbol);
+        sendMessageToFlutter(symbol);
+      }
     });
   </script>
 </body>
 </html>
+
 ''';
